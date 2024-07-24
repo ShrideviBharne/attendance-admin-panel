@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import Navad from '../components/navad'
+import Navbar from '../components/Navbar'
 
 const Register = () => {
   const [instituteName, setInstituteName] = useState('');
@@ -26,7 +26,7 @@ const Register = () => {
 
   return (
     <>
-    <Navad/>
+    <Navbar/>
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100">
       <h1 className="text-2xl font-bold mb-4">Register/Institute Header</h1>
       <div className="bg-white p-8 rounded shadow-md w-80 mb-4">

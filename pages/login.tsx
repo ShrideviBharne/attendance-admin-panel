@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import Navad from '../components/navad'
+import Navbar from '../components/Navbar'
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -24,7 +24,7 @@ const Login = () => {
 
   return (
     <>
-    <Navad/>
+    <Navbar/>
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100">
       <h1 className="text-2xl font-bold mb-4">Login</h1>
       <div className="bg-white p-8 rounded shadow-md w-80 mb-4">
