@@ -1,12 +1,25 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router'; // Import useRouter hook
+import { auth } from '../../firebaseConfig'; 
+import { onAuthStateChanged } from 'firebase/auth';
 import Navad from '../../components/navad';
 
 const Reports = () => {
+  const router=useRouter();
   const [selectedReportType, setSelectedReportType] = useState('');
   const [selectedStudent, setSelectedStudent] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [reportData, setReportData] = useState([]);
+
+  useEffect(()=>{
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        router.replace('/login'); // Use the router instance to replace the current route
+      }
+    });
+    return () => unsubscribe();
+  },[router]);
 
   // Example data for students, classes, and subjects
   const students = [

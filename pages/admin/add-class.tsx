@@ -1,7 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router'; // Import useRouter hook
+import { auth } from '../../firebaseConfig'; 
+import { onAuthStateChanged } from 'firebase/auth';
 import Navad from '../../components/navad';
 
+
 const AddClass = () => {
+  const router = useRouter(); // Initialize useRouter hook
   const [className, setClassName] = useState('');
   const [classID, setClassID] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -10,12 +15,16 @@ const AddClass = () => {
   const [editClassID, setEditClassID] = useState('');
 
   useEffect(() => {
-    // Initially populate the classes state (could be from a database or hardcoded for now)
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        router.replace('/login'); // Use the router instance to replace the current route
+      }
+    });// Initially populate the classes state (could be from a database or hardcoded for now)
     setClasses([
       { classID: '101', className: 'Mathematics' },
       { classID: '102', className: 'Science' },
     ]);
-  }, []);
+  }, [router]); // Add router to the dependency array
 
   const handleAddClass = () => {
     if (isEditing) {

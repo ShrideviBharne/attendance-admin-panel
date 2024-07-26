@@ -1,13 +1,26 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router'; // Import useRouter hook
+import { auth } from '../../firebaseConfig'; 
+import { onAuthStateChanged } from 'firebase/auth';
 import Navad from '../../components/navad';
 
 const AddSubject = () => {
+  const router=useRouter();
   const [subjectID, setSubjectID] = useState('');
   const [subjectName, setSubjectName] = useState('');
   const [classID, setClassID] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [editSubjectID, setEditSubjectID] = useState(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        router.replace('/login'); // Use the router instance to replace the current route
+      }
+    });
+    return () => unsubscribe();
+  }, [router]);
   
   const [subjects, setSubjects] = useState([
     { subjectID: '1', subjectName: 'Math', classID: '1' },

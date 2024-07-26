@@ -1,7 +1,11 @@
-import { useState } from 'react';
-import Navad from '../../components/navad'
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router'; // Import useRouter hook
+import { auth } from '../../firebaseConfig'; 
+import { onAuthStateChanged } from 'firebase/auth';
+import Navad from '../../components/navad';
 
 const Allotments = () => {
+  const router=useRouter();
   const [classID, setClassID] = useState('');
   const [facultyID, setFacultyID] = useState('');
   const [subjectID, setSubjectID] = useState('');
@@ -23,6 +27,15 @@ const Allotments = () => {
     { subjectID: '1', subjectName: 'Math' },
     { subjectID: '2', subjectName: 'Science' },
   ]);
+
+  useEffect(()=>{
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        router.replace('/login'); // Use the router instance to replace the current route
+      }
+    });
+    return () => unsubscribe();
+  },[router]);
 
   const handleAddAllotment = () => {
     if (editMode) {

@@ -1,7 +1,11 @@
-import { useState } from 'react';
-import Navad from '../../components/navad'
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router'; // Import useRouter hook
+import { auth } from '../../firebaseConfig'; 
+import { onAuthStateChanged } from 'firebase/auth';
+import Navad from '../../components/navad';
 
 const AddFaculty = () => {
+  const router = useRouter(); // Initialize useRouter hook
   const [facultyID, setFacultyID] = useState('');
   const [facultyName, setFacultyName] = useState('');
   const [email, setEmail] = useState('');
@@ -12,6 +16,15 @@ const AddFaculty = () => {
     { facultyID: '1', facultyName: 'Faculty 1', email: 'faculty1@example.com', phoneNumber: '1234567890' },
     { facultyID: '2', facultyName: 'Faculty 2', email: 'faculty2@example.com', phoneNumber: '0987654321' },
   ]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        router.replace('/login'); // Use the router instance to replace the current route
+      }
+    });
+    return () => unsubscribe();
+  }, [router]);
 
   const handleAddFaculty = () => {
     setFaculties([...faculties, { facultyID, facultyName, email, phoneNumber }]);

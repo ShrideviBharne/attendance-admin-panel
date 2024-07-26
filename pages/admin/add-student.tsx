@@ -1,7 +1,11 @@
-import { useState } from 'react';
-import Navad from '../../components/navad'
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router'; // Import useRouter hook
+import { auth } from '../../firebaseConfig'; 
+import { onAuthStateChanged } from 'firebase/auth';
+import Navad from '../../components/navad';
 
 const AddStudent = () => {
+  const router=useRouter();
   const [studentName, setStudentName] = useState('');
   const [rollNumber, setRollNumber] = useState('');
   const [classID, setClassID] = useState('');
@@ -17,6 +21,15 @@ const AddStudent = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [editRollNumber, setEditRollNumber] = useState('');
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        router.replace('/login'); // Use the router instance to replace the current route
+      }
+    });
+    return () => unsubscribe();
+  }, [router]);
 
   const handleAddStudent = () => {
     if (isEditing) {
