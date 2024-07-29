@@ -3,6 +3,7 @@ import Navbar from '../components/Navbar';
 import { db } from '../firebaseConfig'; // Import Firestore
 import { collection, addDoc } from 'firebase/firestore'; // Import Firestore functions
 import { useRouter } from 'next/router'; // Import useRouter for redirecting
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth'; // Import Firebase Auth functions
 
 const Register = () => {
   const [instituteName, setInstituteName] = useState('');
@@ -10,25 +11,33 @@ const Register = () => {
   const [departments, setDepartments] = useState('');
   const [password, setPassword] = useState('');
   const [logo, setLogo] = useState('');
+  const [email, setEmail] = useState(''); // Add email state
   const router = useRouter(); // Initialize useRouter
+  const auth = getAuth(); // Initialize Firebase Auth
 
   const handleRegister = async () => {
     try {
+      // Register user with email and password
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
       // Add a new document with a generated ID
-      console.log("Firestore DB:", db); 
       await addDoc(collection(db, 'institutes'), {
         instituteName,
         address,
         departments,
-        password,
         logo,
+        uid: user.uid, // Store user ID
       });
+
       // Clear the form fields
+      
       setInstituteName('');
       setAddress('');
       setDepartments('');
       setPassword('');
       setLogo('');
+      setEmail(''); // Clear email field
       alert('Registration successful!'); // Optional: Notify the user
       // Redirect to login page
       router.push('/login'); // Redirect to login page
@@ -62,6 +71,13 @@ const Register = () => {
             placeholder="Departments (comma separated)"
             value={departments}
             onChange={(e) => setDepartments(e.target.value)}
+            className="mb-4 w-full p-2 border border-gray-300 rounded"
+          />
+          <input
+            type="email" // Change type to email
+            placeholder="Email"
+            value={email} // Bind email state
+            onChange={(e) => setEmail(e.target.value)} // Update email state
             className="mb-4 w-full p-2 border border-gray-300 rounded"
           />
           <input
