@@ -1,16 +1,30 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { auth } from '../../firebaseConfig'; 
 import { onAuthStateChanged } from 'firebase/auth';
+import { db } from '../../firebaseConfig'; // Import Firestore database
+import { collection, getDocs, query, where } from 'firebase/firestore'; // Import Firestore functions
 import Navad from '../../components/navad';
 
 const AdminDashboard = () => {
+  const [instituteData, setInstituteData] = useState(null);
   const router = useRouter();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         router.replace('/login');
+      } else {
+        const institutesRef = collection(db, 'INSTITUTES');
+        const q = query(institutesRef, where('admin_id', '==', user.uid));
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+          const institute = querySnapshot.docs[0].data();
+          setInstituteData(institute);
+        } else {
+          router.replace('/unauthorized');
+        }
       }
     });
 
@@ -22,6 +36,17 @@ const AdminDashboard = () => {
       <Navad />
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 p-4">
         <h1 className="text-3xl font-bold mb-8 text-gray-800">Admin Dashboard</h1>
+        {instituteData ? (
+          <div>
+            <h1>{instituteData.name}</h1>
+            
+            <p>{instituteData.phone_number}</p>
+            <p>{instituteData.email}</p>
+            {/* Other institute details */}
+          </div>
+        ) : (
+          <p>Loading...</p>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-4xl">
           <button
             onClick={() => router.push('/admin/add-class')}

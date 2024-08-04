@@ -7,15 +7,17 @@ import {
   getDocs,
   updateDoc,
   deleteDoc,
-  doc
+  doc,
+  setDoc,
+  query,
+  where
 } from 'firebase/firestore';
 import { useRouter } from 'next/router'; // Import useRouter hook
 import { auth } from '../../firebaseConfig'; 
 import { onAuthStateChanged } from 'firebase/auth';
 
-
 const AddClass = () => {
-  const router =useRouter();
+  const router = useRouter();
   const [className, setClassName] = useState('');
   const [classID, setClassID] = useState('');
   const [deptName, setDeptName] = useState('');
@@ -23,29 +25,57 @@ const AddClass = () => {
   const [classes, setClasses] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
   const [editClassID, setEditClassID] = useState('');
+  const [adminInstituteId, setAdminInstituteId] = useState('');
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
-        router.replace('/login'); // Use the router instance to replace the current route
+        router.replace('/login');
+      } else {
+        // Fetch the admin's institute ID
+        const instituteRef = collection(db, 'INSTITUTES');
+        const q = query(instituteRef, where('admin_id', '==', user.uid));
+        const querySnapshot = await getDocs(q);
+        
+        console.log("User UID:", user.uid); // Log the user ID
+        console.log("Query Snapshot:", querySnapshot.docs); // Log the query results
+        console.log("Authenticated User:", user); // Log the authenticated user
+
+        if (!querySnapshot.empty) {
+          const institute = querySnapshot.docs[0].data();
+          setAdminInstituteId(user.uid);
+        } else {
+          console.error("No institute found for this admin."); // Log if no institute is found
+          router.replace('/unauthorized');
+        }
       }
     });
     return () => unsubscribe();
   }, [router]);
   
   useEffect(() => {
-    
     const fetchClasses = async () => {
-      const querySnapshot = await getDocs(collection(db, 'classes'));
+      const classesRef = collection(db, 'CLASSES');
+      const q = query(classesRef, where('institute_id', '==', adminInstituteId));
+      const querySnapshot = await getDocs(q);
       const classesData = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
       setClasses(classesData);
     };
-    fetchClasses();
-  }, []);
+    if (adminInstituteId) {
+      fetchClasses();
+    }
+  }, [adminInstituteId]);
 
   const handleAddClass = async () => {
+    if (!adminInstituteId) {
+      console.error("Institute ID is not set. Cannot add class.");
+      return; // Exit the function if adminInstituteId is not set
+    }
+
+    console.log("Admin Institute ID:", adminInstituteId); // Log the adminInstituteId for debugging
+
     if (isEditing) {
-      const classRef = doc(db, 'classes', editClassID);
+      const classRef = doc(db, 'CLASSES', editClassID);
       await updateDoc(classRef, { classID, className, deptName });
       setClasses(classes.map(cls => 
         cls.id === editClassID ? { id: editClassID, classID, className, deptName } : cls
@@ -53,8 +83,10 @@ const AddClass = () => {
       setIsEditing(false);
       setEditClassID('');
     } else {
-      const docRef = await addDoc(collection(db, 'classes'), { classID, className, deptName });
-      setClasses([...classes, { id: docRef.id, classID, className, deptName }]);
+      const newClassData = { className, deptName, institute_id: adminInstituteId };
+      const classRef = doc(db, 'CLASSES', classID);
+      await setDoc(classRef, newClassData);
+      setClasses([...classes, { id: classID, classID, className, deptName }]);
     }
     setClassID('');
     setClassName('');
@@ -62,7 +94,7 @@ const AddClass = () => {
   };
 
   const handleDeleteClass = async (id) => {
-    await deleteDoc(doc(db, 'classes', id));
+    await deleteDoc(doc(db, 'CLASSES', id));
     setClasses(classes.filter(cls => cls.id !== id));
   };
 

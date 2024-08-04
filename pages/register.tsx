@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import Navbar from '../components/Navbar';
 import { db } from '../firebaseConfig'; // Import Firestore
-import { collection, addDoc } from 'firebase/firestore'; // Import Firestore functions
+import { collection, doc, setDoc } from 'firebase/firestore'; // Import Firestore functions
 import { useRouter } from 'next/router'; // Import useRouter for redirecting
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth'; // Import Firebase Auth functions
 
@@ -21,17 +21,19 @@ const Register = () => {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // Add a new document with a generated ID
-      await addDoc(collection(db, 'institutes'), {
-        instituteName,
+      // Add a new document with instituteName as the document ID
+      const instituteRef = doc(db, 'INSTITUTES', instituteName); // Create a reference with instituteName as ID
+      await setDoc(instituteRef, {
         address,
         departments,
         logo,
         uid: user.uid, // Store user ID
+        admin_id: user.uid, // Store the admin's user ID directly
+        created_at: new Date(),
+        updated_at: new Date(),
       });
 
       // Clear the form fields
-      
       setInstituteName('');
       setAddress('');
       setDepartments('');
@@ -87,11 +89,11 @@ const Register = () => {
             onChange={(e) => setPassword(e.target.value)}
             className="mb-4 w-full p-2 border border-gray-300 rounded"
           />
-          <input
+          {/* <input
             type="file"
             onChange={(e) => setLogo(e.target.files[0].name)}
             className="mb-4 w-full p-2 border border-gray-300 rounded"
-          />
+          /> */}
           <button
             onClick={handleRegister}
             className="w-full bg-blue-500 text-white p-2 rounded"

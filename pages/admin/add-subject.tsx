@@ -1,54 +1,90 @@
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/router'; // Import useRouter hook
+import { useRouter } from 'next/router';
 import { auth } from '../../firebaseConfig'; 
 import { onAuthStateChanged } from 'firebase/auth';
+import { db } from '../../firebaseConfig'; // Import Firestore database
+import { collection, getDocs, setDoc, doc, deleteDoc, query, where } from 'firebase/firestore'; // Import Firestore functions
 import Navad from '../../components/navad';
 
 const AddSubject = () => {
-  const router=useRouter();
+  const router = useRouter();
   const [subjectID, setSubjectID] = useState('');
   const [subjectName, setSubjectName] = useState('');
   const [classID, setClassID] = useState('');
+  const [department, setDepartment] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [editSubjectID, setEditSubjectID] = useState(null);
+  const [subjects, setSubjects] = useState([]); // State to hold subjects
+  const [classes, setClasses] = useState([]); // State to hold classes
+  const [adminInstituteId, setAdminInstituteId] = useState(''); // New state for admin's institute ID
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
-        router.replace('/login'); // Use the router instance to replace the current route
+        router.replace('/login');
+      } else {
+        // Fetch the admin's institute ID
+        const instituteRef = collection(db, 'INSTITUTES');
+        const q = query(instituteRef, where('admin_id', '==', user.uid));
+        const querySnapshot = await getDocs(q);
+        
+        if (!querySnapshot.empty) {
+          const institute = querySnapshot.docs[0].data();
+          setAdminInstituteId(user.uid); // Set the institute ID
+        } else {
+          console.error("No institute found for this admin."); // Log if no institute is found
+          router.replace('/unauthorized');
+        }
       }
     });
     return () => unsubscribe();
   }, [router]);
-  
-  const [subjects, setSubjects] = useState([
-    { subjectID: '1', subjectName: 'Math', classID: '1' },
-    { subjectID: '2', subjectName: 'Science', classID: '2' },
-  ]);
-  const [classes] = useState([
-    { classID: '1', className: 'Class 1' },
-    { classID: '2', className: 'Class 2' },
-  ]);
 
-  const handleAddSubject = () => {
-    if (editMode) {
-      setSubjects(subjects.map(sub => 
-        sub.subjectID === editSubjectID ? { subjectID, subjectName, classID } : sub
-      ));
-      setEditMode(false);
-      setEditSubjectID(null);
-    } else {
-      setSubjects([...subjects, { subjectID, subjectName, classID }]);
+  useEffect(() => {
+    const fetchSubjects = async () => {
+      const subjectsRef = collection(db, 'SUBJECTS');
+      const q = query(subjectsRef, where('institute_id', '==', adminInstituteId)); // Filter subjects by institute ID
+      const querySnapshot = await getDocs(q);
+      const subjectsData = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      setSubjects(subjectsData);
+    };
+    
+    const fetchClasses = async () => {
+      const classesRef = collection(db, 'CLASSES');
+      const q = query(classesRef, where('institute_id', '==', adminInstituteId)); // Filter classes by institute ID
+      const querySnapshot = await getDocs(q);
+      const classesData = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      setClasses(classesData);
+    };
+
+    if (adminInstituteId) {
+      fetchSubjects(); // Fetch subjects only if the institute ID is set
+      fetchClasses(); // Fetch classes only if the institute ID is set
     }
+  }, [adminInstituteId]);
 
-    setSubjectID('');
-    setSubjectName('');
-    setClassID('');
+  const handleAddSubject = async () => {
+    try {
+      const newSubject = { subjectID, subjectName, classID, department, institute_id: adminInstituteId }; // Include institute ID
+      await setDoc(doc(db, 'SUBJECTS', subjectID), newSubject); // Add subject to Firestore
+      setSubjects([...subjects, newSubject]); // Update local state
+      setSubjectID('');
+      setSubjectName('');
+      setClassID('');
+      setDepartment('');
+    } catch (error) {
+      console.error("Error adding subject: ", error);
+    }
   };
 
-  const handleDeleteSubject = (id) => {
-    setSubjects(subjects.filter(sub => sub.subjectID !== id));
+  const handleDeleteSubject = async (id) => {
+    try {
+      await deleteDoc(doc(db, 'SUBJECTS', id)); // Delete subject from Firestore
+      setSubjects(subjects.filter(sub => sub.id !== id)); // Update local state
+    } catch (error) {
+      console.error("Error deleting subject: ", error);
+    }
   };
 
   const handleEditSubject = (subject) => {
@@ -57,10 +93,11 @@ const AddSubject = () => {
     setSubjectID(subject.subjectID);
     setSubjectName(subject.subjectName);
     setClassID(subject.classID);
+    setDepartment(subject.department);
   };
 
   const filteredSubjects = subjects.filter(sub =>
-    sub.subjectName.toLowerCase().includes(searchTerm.toLowerCase())
+    sub.subjectName && sub.subjectName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -76,8 +113,8 @@ const AddSubject = () => {
           >
             <option value="">Select Class</option>
             {classes.map(cls => (
-              <option key={cls.classID} value={cls.classID}>
-                {cls.className}
+              <option key={cls.id} value={cls.id}>
+                {cls.className} {/* Assuming className is a property in your CLASSES collection */}
               </option>
             ))}
           </select>
@@ -93,6 +130,13 @@ const AddSubject = () => {
             placeholder="Subject Name"
             value={subjectName}
             onChange={(e) => setSubjectName(e.target.value)}
+            className="mb-4 w-full p-2 border border-gray-300 rounded"
+          />
+          <input
+            type="text"
+            placeholder="Department"
+            value={department}
+            onChange={(e) => setDepartment(e.target.value)}
             className="mb-4 w-full p-2 border border-gray-300 rounded"
           />
           <button
@@ -120,7 +164,7 @@ const AddSubject = () => {
           </thead>
           <tbody>
             {filteredSubjects.map(sub => (
-              <tr key={sub.subjectID}>
+              <tr key={sub.id}>
                 <td className="p-2 border-b">{sub.subjectID}</td>
                 <td className="p-2 border-b">{sub.subjectName}</td>
                 <td className="p-2 border-b">{sub.classID}</td>

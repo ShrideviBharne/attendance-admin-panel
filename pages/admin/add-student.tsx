@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import Navad from '../../components/navad';
 import { db } from '../../firebaseConfig';
-import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
 import { useRouter } from 'next/router'; // Import useRouter hook
 import { auth } from '../../firebaseConfig'; 
 import { onAuthStateChanged } from 'firebase/auth'; 
 
 const AddStudent = () => {
-  const router=useRouter();
+  const router = useRouter();
   const [studentName, setStudentName] = useState('');
   const [rollNumber, setRollNumber] = useState('');
   const [classID, setClassID] = useState('');
@@ -16,11 +16,25 @@ const AddStudent = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [editRollNumber, setEditRollNumber] = useState('');
+  const [adminInstituteId, setAdminInstituteId] = useState(''); // New state for admin's institute ID
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         router.replace('/login'); // Use the router instance to replace the current route
+      } else {
+        // Fetch the admin's institute ID
+        const instituteRef = collection(db, 'INSTITUTES');
+        const q = query(instituteRef, where('admin_id', '==', user.uid));
+        const querySnapshot = await getDocs(q);
+        
+        if (!querySnapshot.empty) {
+          const institute = querySnapshot.docs[0].data();
+          setAdminInstituteId(user.uid); // Set the institute ID
+        } else {
+          console.error("No institute found for this admin."); // Log if no institute is found
+          router.replace('/unauthorized');
+        }
       }
     });
     return () => unsubscribe();
@@ -29,11 +43,12 @@ const AddStudent = () => {
   useEffect(() => {
     const fetchClasses = async () => {
       try {
-        const classCollection = collection(db, 'classes');
-        const classSnapshot = await getDocs(classCollection);
+        const classCollection = collection(db, 'CLASSES');
+        const q = query(classCollection, where('institute_id', '==', adminInstituteId)); // Filter classes by institute ID
+        const classSnapshot = await getDocs(q);
         const classList = classSnapshot.docs.map(doc => ({
           id: doc.id,
-          ...doc.data(),
+          className: doc.data().className, // Ensure className is included
         }));
         setClasses(classList);
       } catch (error) {
@@ -41,14 +56,17 @@ const AddStudent = () => {
       }
     };
 
-    fetchClasses();
-  }, []);
+    if (adminInstituteId) {
+      fetchClasses(); // Fetch classes only if the institute ID is set
+    }
+  }, [adminInstituteId]);
 
   useEffect(() => {
     const fetchStudents = async () => {
       try {
-        const studentCollection = collection(db, 'students');
-        const studentSnapshot = await getDocs(studentCollection);
+        const studentCollection = collection(db, 'STUDENTS');
+        const q = query(studentCollection, where('institute_id', '==', adminInstituteId)); // Filter students by institute ID
+        const studentSnapshot = await getDocs(q);
         const studentList = studentSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
@@ -59,24 +77,26 @@ const AddStudent = () => {
       }
     };
 
-    fetchStudents();
-  }, []);
+    if (adminInstituteId) {
+      fetchStudents(); // Fetch students only if the institute ID is set
+    }
+  }, [adminInstituteId]);
 
   const handleAddStudent = async () => {
     try {
       if (isEditing) {
-        const studentRef = doc(db, 'students', editRollNumber);
-        await updateDoc(studentRef, { studentName, rollNumber, classID }); // Ensure classID is included
+        const studentRef = doc(db, 'STUDENTS', editRollNumber);
+        await updateDoc(studentRef, { studentName, rollNumber, classID, institute_id: adminInstituteId }); // Ensure institute_id is included
         setStudents(students.map(stu =>
           stu.rollNumber === editRollNumber
-            ? { studentName, rollNumber, classID } // Ensure classID is updated
+            ? { studentName, rollNumber, classID, institute_id: adminInstituteId } // Ensure classID is updated
             : stu
         ));
         setIsEditing(false);
         setEditRollNumber('');
       } else {
-        const newStudent = { studentName, rollNumber, classID }; // Ensure classID is included
-        const studentRef = doc(db, 'students', rollNumber);
+        const newStudent = { studentName, rollNumber, classID, institute_id: adminInstituteId }; // Ensure institute_id is included
+        const studentRef = doc(db, 'STUDENTS', rollNumber);
         await setDoc(studentRef, newStudent);
         setStudents([...students, newStudent]);
       }
@@ -90,7 +110,7 @@ const AddStudent = () => {
 
   const handleDeleteStudent = async (id: string) => {
     try {
-      const studentRef = doc(db, 'students', id);
+      const studentRef = doc(db, 'STUDENTS', id);
       await deleteDoc(studentRef);
       setStudents(students.filter(stu => stu.rollNumber !== id));
     } catch (error) {
@@ -175,7 +195,7 @@ const AddStudent = () => {
               <tr key={stu.rollNumber}>
                 <td className="p-2 border-b">{stu.rollNumber}</td>
                 <td className="p-2 border-b">{stu.studentName}</td>
-                <td className="p-2 border-b">{stu.classID}</td>
+                <td className="p-2 border-b">{stu.classID.name}</td>
                 <td className="p-2 border-b">
                   <button
                     onClick={() => handleEditStudent(stu.rollNumber)}

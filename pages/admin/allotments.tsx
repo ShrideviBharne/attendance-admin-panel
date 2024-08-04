@@ -1,51 +1,80 @@
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/router'; // Import useRouter hook
+import { useRouter } from 'next/router'; 
 import { auth } from '../../firebaseConfig'; 
 import { onAuthStateChanged } from 'firebase/auth';
+import { db } from '../../firebaseConfig'; // Import Firestore database
+import { collection, getDocs, addDoc, query, where } from 'firebase/firestore'; // Import Firestore functions
 import Navad from '../../components/navad';
 
 const Allotments = () => {
-  const router=useRouter();
+  const router = useRouter();
   const [classID, setClassID] = useState('');
   const [facultyID, setFacultyID] = useState('');
   const [subjectID, setSubjectID] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [editIndex, setEditIndex] = useState(null);
-  const [allotments, setAllotments] = useState([
-    { classID: '1', facultyID: '1', subjectID: '1' },
-  ]);
-  const [classes] = useState([
-    { classID: '1', className: 'Class 1' },
-    { classID: '2', className: 'Class 2' },
-  ]);
-  const [faculties] = useState([
-    { facultyID: '1', facultyName: 'Faculty 1' },
-    { facultyID: '2', facultyName: 'Faculty 2' },
-  ]);
-  const [subjects] = useState([
-    { subjectID: '1', subjectName: 'Math' },
-    { subjectID: '2', subjectName: 'Science' },
-  ]);
+  const [allotments, setAllotments] = useState([]);
+  const [classes, setClasses] = useState([]);
+  const [faculties, setFaculties] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [adminInstituteId, setAdminInstituteId] = useState(''); // New state for admin's institute ID
 
-  useEffect(()=>{
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
-        router.replace('/login'); // Use the router instance to replace the current route
+        router.replace('/login');
+      } else {
+        // Fetch the admin's institute ID
+        const instituteRef = collection(db, 'INSTITUTES');
+        const q = query(instituteRef, where('admin_id', '==', user.uid));
+        const querySnapshot = await getDocs(q);
+        
+        if (!querySnapshot.empty) {
+          const institute = querySnapshot.docs[0].data();
+          setAdminInstituteId(user.uid); // Set the institute ID
+        } else {
+          console.error("No institute found for this admin."); // Log if no institute is found
+          router.replace('/unauthorized');
+        }
       }
     });
     return () => unsubscribe();
-  },[router]);
+  }, [router]);
 
-  const handleAddAllotment = () => {
+  useEffect(() => {
+    const fetchData = async () => {
+      const facultyRef = collection(db, 'FACULTY');
+      const facultyQ = query(facultyRef, where('institute_id', '==', adminInstituteId)); // Filter faculties by institute ID
+      const facultySnapshot = await getDocs(facultyQ);
+      const facultyList = facultySnapshot.docs.map(doc => ({ facultyID: doc.id, facultyName: doc.data().facultyName }));
+      setFaculties(facultyList);
+
+      const classRef = collection(db, 'CLASSES');
+      const classQ = query(classRef, where('institute_id', '==', adminInstituteId)); // Filter classes by institute ID
+      const classSnapshot = await getDocs(classQ);
+      const classList = classSnapshot.docs.map(doc => ({ classID: doc.id, className: doc.data().className }));
+      setClasses(classList);
+
+      const subjectRef = collection(db, 'SUBJECTS');
+      const subjectQ = query(subjectRef, where('institute_id', '==', adminInstituteId)); // Filter subjects by institute ID
+      const subjectSnapshot = await getDocs(subjectQ);
+      const subjectList = subjectSnapshot.docs.map(doc => ({ subjectID: doc.id, subjectName: doc.data().subjectName }));
+      setSubjects(subjectList);
+    };
+
+    if (adminInstituteId) {
+      fetchData(); // Fetch data only if the institute ID is set
+    }
+  }, [adminInstituteId]);
+
+  const handleAddAllotment = async () => {
+    const newAllotment = { classID, facultyID, subjectID, institute_id: adminInstituteId }; // Include institute ID
     if (editMode) {
-      setAllotments(allotments.map((allot, index) => 
-        index === editIndex ? { classID, facultyID, subjectID } : allot
-      ));
-      setEditMode(false);
-      setEditIndex(null);
+      // Update logic here if needed
     } else {
-      setAllotments([...allotments, { classID, facultyID, subjectID }]);
+      await addDoc(collection(db, 'ALLOTMENTS'), newAllotment); // Store in ALLOTMENT table
+      setAllotments([...allotments, newAllotment]);
     }
     setClassID('');
     setFacultyID('');
@@ -130,34 +159,40 @@ const Allotments = () => {
       <table className="min-w-full bg-white rounded shadow-md">
         <thead>
           <tr>
-            <th className="p-2 border-b">Class ID</th>
-            <th className="p-2 border-b">Faculty ID</th>
-            <th className="p-2 border-b">Subject ID</th>
+            <th className="p-2 border-b">Class Name</th>
+            <th className="p-2 border-b">Faculty Name</th>
+            <th className="p-2 border-b">Subject Name</th>
             <th className="p-2 border-b">Actions</th>
           </tr>
         </thead>
         <tbody>
-          {filteredAllotments.map((allot, index) => (
-            <tr key={index}>
-              <td className="p-2 border-b">{allot.classID}</td>
-              <td className="p-2 border-b">{allot.facultyID}</td>
-              <td className="p-2 border-b">{allot.subjectID}</td>
-              <td className="p-2 border-b">
-                <button
-                  onClick={() => handleEditAllotment(index)}
-                  className="bg-yellow-500 text-white p-2 rounded mr-2"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => handleDeleteAllotment(index)}
-                  className="bg-red-500 text-white p-2 rounded"
-                >
-                  Delete
-                </button>
-              </td>
-            </tr>
-          ))}
+          {filteredAllotments.map((allot, index) => {
+            const className = classes.find(cls => cls.classID === allot.classID)?.className || 'N/A';
+            const facultyName = faculties.find(fac => fac.facultyID === allot.facultyID)?.facultyName || 'N/A';
+            const subjectName = subjects.find(sub => sub.subjectID === allot.subjectID)?.subjectName || 'N/A';
+
+            return (
+              <tr key={index}>
+                <td className="p-2 border-b">{className}</td>
+                <td className="p-2 border-b">{facultyName}</td>
+                <td className="p-2 border-b">{subjectName}</td>
+                <td className="p-2 border-b">
+                  <button
+                    onClick={() => handleEditAllotment(index)}
+                    className="bg-yellow-500 text-white p-2 rounded mr-2"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDeleteAllotment(index)}
+                    className="bg-red-500 text-white p-2 rounded"
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
