@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import Navbar from '../components/Navbar';
 import { db } from '../firebaseConfig'; // Import Firestore
-import { collection, doc, setDoc } from 'firebase/firestore'; // Import Firestore functions
+import { collection, doc, setDoc, getDocs, query, orderBy } from 'firebase/firestore'; // Import Firestore functions
 import { useRouter } from 'next/router'; // Import useRouter for redirecting
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth'; // Import Firebase Auth functions
 
@@ -25,13 +25,34 @@ const Register = () => {
       const instituteRef = doc(db, 'INSTITUTES', instituteName); // Create a reference with instituteName as ID
       await setDoc(instituteRef, {
         address,
-        departments,
         logo,
         uid: user.uid, // Store user ID
         admin_id: user.uid, // Store the admin's user ID directly
         created_at: new Date(),
         updated_at: new Date(),
+        institute_id: user.uid, // Store user uid as institute_id
       });
+
+      // Split departments into an array and store each in the DEPARTMENTS table
+      const departmentList = departments.split(',').map(dept => dept.trim());
+      const departmentsRef = collection(db, 'DEPARTMENTS');
+
+      // Get the highest document ID in the DEPARTMENTS table
+      const highestIdQuery = query(departmentsRef, orderBy('deptID', 'desc'));
+      const highestIdSnapshot = await getDocs(highestIdQuery);
+      const highestId = highestIdSnapshot.empty ? 0 : highestIdSnapshot.docs[0].data().deptID;
+
+      // Add each department to the DEPARTMENTS table
+      for (let i = 0; i < departmentList.length; i++) {
+        const deptName = departmentList[i];
+        const deptID = highestId + i + 1; // Increment the highest ID for each department
+        const deptRef = doc(departmentsRef, deptID.toString()); // Create a reference with deptID as ID
+        await setDoc(deptRef, {
+          deptID,
+          deptName,
+          institute_id: user.uid, // Store user uid as institute_id
+        });
+      }
 
       // Clear the form fields
       setInstituteName('');

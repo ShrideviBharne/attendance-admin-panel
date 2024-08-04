@@ -19,10 +19,10 @@ import { onAuthStateChanged } from 'firebase/auth';
 const AddClass = () => {
   const router = useRouter();
   const [className, setClassName] = useState('');
-  const [classID, setClassID] = useState('');
   const [deptName, setDeptName] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [classes, setClasses] = useState([]);
+  const [departments, setDepartments] = useState([]); // New state for departments
   const [isEditing, setIsEditing] = useState(false);
   const [editClassID, setEditClassID] = useState('');
   const [adminInstituteId, setAdminInstituteId] = useState('');
@@ -37,13 +37,15 @@ const AddClass = () => {
         const q = query(instituteRef, where('admin_id', '==', user.uid));
         const querySnapshot = await getDocs(q);
         
-        console.log("User UID:", user.uid); // Log the user ID
-        console.log("Query Snapshot:", querySnapshot.docs); // Log the query results
-        console.log("Authenticated User:", user); // Log the authenticated user
-
         if (!querySnapshot.empty) {
           const institute = querySnapshot.docs[0].data();
           setAdminInstituteId(user.uid);
+          // Fetch departments corresponding to the institute
+          const deptRef = collection(db, 'DEPARTMENTS');
+          const deptQ = query(deptRef, where('institute_id', '==', user.uid));
+          const deptSnapshot = await getDocs(deptQ);
+          const deptData = deptSnapshot.docs.map(doc => doc.data().deptName);
+          setDepartments(deptData); // Set the departments state
         } else {
           console.error("No institute found for this admin."); // Log if no institute is found
           router.replace('/unauthorized');
@@ -72,23 +74,22 @@ const AddClass = () => {
       return; // Exit the function if adminInstituteId is not set
     }
 
-    console.log("Admin Institute ID:", adminInstituteId); // Log the adminInstituteId for debugging
+    const highestClassID = classes.length > 0 ? Math.max(...classes.map(cls => parseInt(cls.classID))) : 0;
+    const newClassID = (highestClassID + 1).toString(); // Generate new Class ID
 
     if (isEditing) {
       const classRef = doc(db, 'CLASSES', editClassID);
-      await updateDoc(classRef, { classID, className, deptName });
+      await updateDoc(classRef, { classID: newClassID, className, deptName });
       setClasses(classes.map(cls => 
-        cls.id === editClassID ? { id: editClassID, classID, className, deptName } : cls
+        cls.id === editClassID ? { id: editClassID, classID: newClassID, className, deptName } : cls
       ));
       setIsEditing(false);
       setEditClassID('');
     } else {
-      const newClassData = { className, deptName, institute_id: adminInstituteId };
-      const classRef = doc(db, 'CLASSES', classID);
-      await setDoc(classRef, newClassData);
-      setClasses([...classes, { id: classID, classID, className, deptName }]);
+      const newClassData = { classID: newClassID, className, deptName, institute_id: adminInstituteId };
+      await setDoc(doc(db, 'CLASSES', newClassID), newClassData);
+      setClasses([...classes, { id: newClassID, classID: newClassID, className, deptName }]);
     }
-    setClassID('');
     setClassName('');
     setDeptName('');
   };
@@ -99,7 +100,6 @@ const AddClass = () => {
   };
 
   const handleEditClass = (cls) => {
-    setClassID(cls.classID);
     setClassName(cls.className);
     setDeptName(cls.deptName);
     setIsEditing(true);
@@ -120,25 +120,21 @@ const AddClass = () => {
         <div className="bg-white p-8 rounded shadow-md w-80 mb-4">
           <input
             type="text"
-            placeholder="Class ID"
-            value={classID}
-            onChange={(e) => setClassID(e.target.value)}
-            className="mb-4 w-full p-2 border border-gray-300 rounded"
-          />
-          <input
-            type="text"
             placeholder="Class Name"
             value={className}
             onChange={(e) => setClassName(e.target.value)}
             className="mb-4 w-full p-2 border border-gray-300 rounded"
           />
-          <input
-            type="text"
-            placeholder="Department Name"
+          <select
             value={deptName}
             onChange={(e) => setDeptName(e.target.value)}
             className="mb-4 w-full p-2 border border-gray-300 rounded"
-          />
+          >
+            <option value="">Select Department</option>
+            {departments.map((dept, index) => (
+              <option key={index} value={dept}>{dept}</option>
+            ))}
+          </select>
           <button
             onClick={handleAddClass}
             className="w-full bg-blue-500 text-white p-2 rounded"

@@ -28,6 +28,7 @@ const AddFaculty = () => {
   const [facultyID, setFacultyID] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [adminInstituteId, setAdminInstituteId] = useState(''); // New state for admin's institute ID
+  const [departments, setDepartments] = useState([]); // New state for departments
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -39,12 +40,10 @@ const AddFaculty = () => {
         const q = query(instituteRef, where('admin_id', '==', user.uid));
         const querySnapshot = await getDocs(q);
         
-        console.log("User UID:", user.uid); // Log the user ID
-        console.log("Query Snapshot:", querySnapshot.docs); // Log the query results
-
         if (!querySnapshot.empty) {
           const institute = querySnapshot.docs[0].data();
           setAdminInstituteId(user.uid); // Set the institute ID
+          fetchDepartments(user.uid); // Fetch departments for the user
         } else {
           console.error("No institute found for this admin."); // Log if no institute is found
           router.replace('/unauthorized');
@@ -53,6 +52,14 @@ const AddFaculty = () => {
     });
     return () => unsubscribe();
   }, [router]);
+
+  const fetchDepartments = async (userId) => {
+    const departmentsRef = collection(db, 'DEPARTMENTS');
+    const q = query(departmentsRef, where('institute_id', '==', userId)); // Filter by user ID
+    const querySnapshot = await getDocs(q);
+    const departmentsData = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+    setDepartments(departmentsData); // Set the departments state
+  };
 
   useEffect(() => {
     const fetchFaculties = async () => {
@@ -106,12 +113,8 @@ const AddFaculty = () => {
         institute_id: adminInstituteId // Include institute ID
       };
 
-      // Debugging: Log the newFaculty data
-      console.log("New Faculty Data:", newFaculty);
-
       // Using setDoc instead of addDoc to use custom facultyID
       await setDoc(doc(db, 'FACULTY', newFacultyID.toString()), newFaculty);
-      console.log("Document written with ID: ", newFacultyID); // Log the new document ID
       setFaculties([...faculties, newFaculty]); // Add the new faculty to the state
       
       // Reset fields after successful addition
@@ -180,13 +183,16 @@ const AddFaculty = () => {
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100">
         <h1 className="text-2xl font-bold mb-4">Add/Update Faculty</h1>
         <div className="bg-white p-8 rounded shadow-md w-80 mb-4">
-          <input
-            type="text"
-            placeholder="Department"
+          <select
             value={dept}
             onChange={(e) => setDept(e.target.value)}
             className="mb-4 w-full p-2 border border-gray-300 rounded"
-          />
+          >
+            <option value="">Select Department</option>
+            {departments.map(department => (
+              <option key={department.id} value={department.deptName}>{department.deptName}</option>
+            ))}
+          </select>
           <input
             type="text"
             placeholder="Faculty Name"
