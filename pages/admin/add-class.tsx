@@ -74,7 +74,7 @@ const AddClass = () => {
       return; // Exit the function if adminInstituteId is not set
     }
 
-    const highestClassID = classes.length > 0 ? Math.max(...classes.map(cls => parseInt(cls.classID))) : 0;
+    const highestClassID = classes.length > 0 ? Math.max(...classes.map(cls => parseInt(cls.classID) || 0)) : 0; // Ensure NaN is handled
     const newClassID = (highestClassID + 1).toString(); // Generate new Class ID
 
     if (isEditing) {
@@ -130,7 +130,7 @@ const AddClass = () => {
             onChange={(e) => setDeptName(e.target.value)}
             className="mb-4 w-full p-2 border border-gray-300 rounded"
           >
-            <option value="">Select Department</option>
+            <option value="" >Select Department</option>
             {departments.map((dept, index) => (
               <option key={index} value={dept}>{dept}</option>
             ))}

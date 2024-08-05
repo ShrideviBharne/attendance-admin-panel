@@ -2,34 +2,74 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router'; // Import useRouter hook
 import { auth } from '../../firebaseConfig'; 
 import { onAuthStateChanged } from 'firebase/auth';
+import { db } from '../../firebaseConfig'; // Import Firestore database
+import { collection, getDocs, query, where } from 'firebase/firestore'; // Import Firestore functions
 import Navad from '../../components/navad';
 
 const Reports = () => {
-  const router=useRouter();
+  const router = useRouter();
   const [selectedReportType, setSelectedReportType] = useState('');
   const [selectedStudent, setSelectedStudent] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [reportData, setReportData] = useState([]);
+  const [students, setStudents] = useState([]); // State for students
+  const [classes, setClasses] = useState([]); // State for classes
+  const [subjects, setSubjects] = useState([]); // State for subjects
+  const [adminInstituteId, setAdminInstituteId] = useState(''); // New state for admin's institute ID
+  const [searchTerm, setSearchTerm] = useState(''); // State for student search term
+  const [filteredStudents, setFilteredStudents] = useState([]); // State for filtered students based on search
 
-  useEffect(()=>{
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         router.replace('/login'); // Use the router instance to replace the current route
+      } else {
+        // Fetch the admin's institute ID
+        const instituteRef = collection(db, 'INSTITUTES');
+        const q = query(instituteRef, where('admin_id', '==', user.uid));
+        const querySnapshot = await getDocs(q);
+        
+        if (!querySnapshot.empty) {
+          const institute = querySnapshot.docs[0].data();
+          setAdminInstituteId(user.uid); // Set the institute ID
+        } else {
+          console.error("No institute found for this admin."); // Log if no institute is found
+          router.replace('/unauthorized'); // Redirect to unauthorized page
+        }
       }
     });
     return () => unsubscribe();
-  },[router]);
+  }, [router]);
 
-  // Example data for students, classes, and subjects
-  const students = [
-    { id: '1', name: 'John Doe' },
-    { id: '2', name: 'Jane Smith' },
-    // Add more students as needed
-  ];
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!adminInstituteId) return; // Ensure adminInstituteId is set before fetching
 
-  const classes = ['Class 10A', 'Class 10B', 'Class 11A', 'Class 11B'];
-  const subjects = ['Math', 'Science', 'History', 'English'];
+      // Fetch students
+      const studentRef = collection(db, 'STUDENTS');
+      const studentQ = query(studentRef, where('institute_id', '==', adminInstituteId)); // Filter students by institute ID
+      const studentSnapshot = await getDocs(studentQ);
+      const studentList = studentSnapshot.docs.map(doc => ({ id: doc.id, name: doc.data().studentName })); // Include document ID
+      setStudents(studentList); // Set students state
+
+      // Fetch classes
+      const classRef = collection(db, 'CLASSES');
+      const classQ = query(classRef, where('institute_id', '==', adminInstituteId)); // Filter classes by institute ID
+      const classSnapshot = await getDocs(classQ);
+      const classList = classSnapshot.docs.map(doc => ({ classID: doc.id, className: doc.data().className }));
+      setClasses(classList); // Set classes state
+
+      // Fetch subjects
+      const subjectRef = collection(db, 'SUBJECTS');
+      const subjectQ = query(subjectRef, where('institute_id', '==', adminInstituteId)); // Filter subjects by institute ID
+      const subjectSnapshot = await getDocs(subjectQ);
+      const subjectList = subjectSnapshot.docs.map(doc => ({ subjectID: doc.id, subjectName: doc.data().subjectName }));
+      setSubjects(subjectList); // Set subjects state
+    };
+
+    fetchData(); // Fetch data only if the institute ID is set
+  }, [adminInstituteId]);
 
   const fetchReportData = async (type, filter) => {
     // Replace with actual data fetching logic based on `type` and `filter`
@@ -47,6 +87,8 @@ const Reports = () => {
     setSelectedClass('');
     setSelectedSubject('');
     setReportData([]);
+    setSearchTerm(''); // Reset search term when report type changes
+    setFilteredStudents([]); // Reset filtered students
   };
 
   const handleGenerateReport = () => {
@@ -56,6 +98,19 @@ const Reports = () => {
       subject: selectedSubject,
     };
     fetchReportData(selectedReportType, filter);
+  };
+
+  const handleStudentSearch = (event) => {
+    const value = event.target.value;
+    setSearchTerm(value);
+    if (value) {
+      const filtered = students.filter(student => 
+        student.name.toLowerCase().includes(value.toLowerCase())
+      );
+      setFilteredStudents(filtered);
+    } else {
+      setFilteredStudents([]);
+    }
   };
 
   return (
@@ -79,17 +134,31 @@ const Reports = () => {
 
         {selectedReportType === 'studentwise' && (
           <div className="mb-4">
-            <label className="block mb-2">Select Student:</label>
-            <select
-              value={selectedStudent}
-              onChange={(e) => setSelectedStudent(e.target.value)}
-              className="w-full p-2 border rounded"
-            >
-              <option value="" disabled>Select Student</option>
-              {students.map((student) => (
-                <option key={student.id} value={student.id}>{student.name}</option>
-              ))}
-            </select>
+            <label className="block mb-2">Search Student:</label>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={handleStudentSearch}
+              placeholder="Type student name..."
+              className="w-full p-2 border rounded mb-2"
+            />
+            {filteredStudents.length > 0 && (
+              <ul className="border rounded bg-white max-h-40 overflow-y-auto">
+                {filteredStudents.map(student => (
+                  <li 
+                    key={student.id} 
+                    onClick={() => {
+                      setSelectedStudent(student.id);
+                      setSearchTerm(student.name); // Set the input to the selected student's name
+                      setFilteredStudents([]); // Clear the filtered list
+                    }}
+                    className="p-2 hover:bg-gray-200 cursor-pointer"
+                  >
+                    {student.name}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
 
@@ -102,8 +171,8 @@ const Reports = () => {
               className="w-full p-2 border rounded"
             >
               <option value="" disabled>Select Class</option>
-              {classes.map((className, index) => (
-                <option key={index} value={className}>{className}</option>
+              {classes.map((className) => (
+                <option key={className.classID} value={className.classID}>{className.className}</option>
               ))}
             </select>
           </div>
@@ -118,8 +187,8 @@ const Reports = () => {
               className="w-full p-2 border rounded"
             >
               <option value="" disabled>Select Subject</option>
-              {subjects.map((subject, index) => (
-                <option key={index} value={subject}>{subject}</option>
+              {subjects.map((subject) => (
+                <option key={subject.subjectID} value={subject.subjectID}>{subject.subjectName}</option>
               ))}
             </select>
           </div>
@@ -151,8 +220,6 @@ const Reports = () => {
               <tr>
                 <th className="p-2 border-b">Name</th>
                 <th className="p-2 border-b">Roll Number</th>
-                {/* <th className="p-2 border-b">Class</th>
-                <th className="p-2 border-b">Subject</th> */}
                 <th className="p-2 border-b">Days Present</th>
                 <th className="p-2 border-b">Percentage</th>
               </tr>
@@ -162,8 +229,6 @@ const Reports = () => {
                 <tr key={index}>
                   <td className="p-2 border-b">{data.name}</td>
                   <td className="p-2 border-b">{data.rollNum}</td>
-                  {/* <td className="p-2 border-b">{data.class}</td>
-                  <td className="p-2 border-b">{data.subject}</td> */}
                   <td className="p-2 border-b">{data.daysPresent}</td>
                   <td className="p-2 border-b">{data.percentage}</td>
                 </tr>

@@ -61,6 +61,13 @@ const Allotments = () => {
       const subjectSnapshot = await getDocs(subjectQ);
       const subjectList = subjectSnapshot.docs.map(doc => ({ subjectID: doc.id, subjectName: doc.data().subjectName }));
       setSubjects(subjectList);
+
+      // Fetch allotments
+      const allotmentRef = collection(db, 'ALLOTMENTS');
+      const allotmentQ = query(allotmentRef, where('institute_id', '==', adminInstituteId)); // Filter allotments by institute ID
+      const allotmentSnapshot = await getDocs(allotmentQ);
+      const allotmentList = allotmentSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })); // Include document ID
+      setAllotments(allotmentList); // Set allotments state
     };
 
     if (adminInstituteId) {
