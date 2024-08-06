@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import Navad from '../../components/navad';
-import { db } from '../../firebaseConfig';
+import { db, auth } from '../../firebaseConfig';
 import {
   collection,
   getDocs,
@@ -13,8 +13,7 @@ import {
   where
 } from 'firebase/firestore';
 import { useRouter } from 'next/router';
-import { auth } from '../../firebaseConfig'; 
-import { onAuthStateChanged } from 'firebase/auth';
+import { createUserWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
 
 const AddFaculty = () => {
   const router = useRouter();
@@ -27,26 +26,25 @@ const AddFaculty = () => {
   const [faculties, setFaculties] = useState([]);
   const [facultyID, setFacultyID] = useState('');
   const [isEditing, setIsEditing] = useState(false);
-  const [adminInstituteId, setAdminInstituteId] = useState(''); // New state for admin's institute ID
-  const [departments, setDepartments] = useState([]); // New state for departments
+  const [adminInstituteId, setAdminInstituteId] = useState('');
+  const [departments, setDepartments] = useState([]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         router.replace('/login');
       } else {
-        // Fetch the admin's institute ID
         const instituteRef = collection(db, 'INSTITUTES');
         const q = query(instituteRef, where('admin_id', '==', user.uid));
         const querySnapshot = await getDocs(q);
-        
+
         if (!querySnapshot.empty) {
           const institute = querySnapshot.docs[0].data();
-          setAdminInstituteId(user.uid); // Set the institute ID
-          fetchDepartments(user.uid); // Fetch departments for the user
+          setAdminInstituteId(user.uid);
+          fetchDepartments(user.uid);
         } else {
-          console.error("No institute found for this admin."); // Log if no institute is found
-          router.replace('/unauthorized');
+          console.error("No institute found for this admin.");
+          //router.replace('/unauthorized');
         }
       }
     });
@@ -55,78 +53,62 @@ const AddFaculty = () => {
 
   const fetchDepartments = async (userId) => {
     const departmentsRef = collection(db, 'DEPARTMENTS');
-    const q = query(departmentsRef, where('institute_id', '==', userId)); // Filter by user ID
+    const q = query(departmentsRef, where('institute_id', '==', userId));
     const querySnapshot = await getDocs(q);
     const departmentsData = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-    setDepartments(departmentsData); // Set the departments state
+    setDepartments(departmentsData);
   };
 
   useEffect(() => {
     const fetchFaculties = async () => {
       const facultiesRef = collection(db, 'FACULTY');
-      const q = query(facultiesRef, where('institute_id', '==', adminInstituteId)); // Filter by institute ID
+      const q = query(facultiesRef, where('institute_id', '==', adminInstituteId));
       const querySnapshot = await getDocs(q);
-      const facultiesData = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, facultyID: doc.data().facultyID })); // Include facultyID
+      const facultiesData = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, facultyID: doc.data().facultyID }));
       setFaculties(facultiesData);
-      
-      // Fetch the highest faculty ID from FACULTY
+
       const facultyIDs = facultiesData.map(fac => fac.facultyID).filter(id => !isNaN(id));
       const highestID = facultyIDs.length > 0 ? Math.max(...facultyIDs) : 0;
-      setFacultyID((highestID + 1).toString()); // Set auto-incremented faculty ID
+      setFacultyID((highestID + 1).toString());
     };
     if (adminInstituteId) {
-      fetchFaculties(); // Fetch faculties only if the institute ID is set
+      fetchFaculties();
     }
   }, [adminInstituteId]);
 
   const handleAddFaculty = async () => {
     if (!facultyName || !email || !phoneNumber || !password || !dept) {
       console.error("All fields are required.");
-      return; // Exit if any field is empty
+      return;
     }
 
     try {
-      // Ensure user is authenticated
-      const user = auth.currentUser; // Check if user is already authenticated
-      if (!user) {
-        console.error("User is not authenticated.");
-        return; // Exit if user is not authenticated
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      if (user) {
+        const newFacultyID = facultyID;
+        const newFaculty = {
+          facultyID: newFacultyID,
+          facultyName,
+          email,
+          phoneNumber,
+          dept,
+          institute_id: adminInstituteId
+        };
+
+        await setDoc(doc(db, 'FACULTY', newFacultyID.toString()), newFaculty);
+        setFaculties([...faculties, newFaculty]);
+
+        setFacultyID((parseInt(newFacultyID) + 1).toString());
+        setFacultyName('');
+        setEmail('');
+        setPhoneNumber('');
+        setPassword('');
+        setDept('');
+        setIsEditing(false);
       }
-
-      // Fetch the current faculty IDs
-      const querySnapshot = await getDocs(collection(db, 'FACULTY'));
-      const existingFacultyIDs = querySnapshot.docs.map(doc => doc.data().facultyID);
-
-      // Generate a new unique faculty ID
-      let newFacultyID = parseInt(facultyID);
-      while (existingFacultyIDs.includes(newFacultyID)) {
-        newFacultyID++; // Increment until a unique ID is found
-      }
-
-      const newFaculty = { 
-        facultyID: newFacultyID, 
-        facultyName, 
-        email, 
-        phoneNumber, 
-        password, 
-        dept,
-        institute_id: adminInstituteId // Include institute ID
-      };
-
-      // Using setDoc instead of addDoc to use custom facultyID
-      await setDoc(doc(db, 'FACULTY', newFacultyID.toString()), newFaculty);
-      setFaculties([...faculties, newFaculty]); // Add the new faculty to the state
-      
-      // Reset fields after successful addition
-      setFacultyID((newFacultyID + 1).toString()); // Prepare the next ID
-      setFacultyName('');
-      setEmail('');
-      setPhoneNumber('');
-      setPassword('');
-      setDept('');
-      setIsEditing(false); // Reset edit mode
     } catch (error) {
-      console.error("Error adding faculty: ", error); // Log the entire error object for more details
+      console.error("Error adding faculty: ", error);
     }
   };
 
@@ -136,30 +118,28 @@ const AddFaculty = () => {
   };
 
   const handleUpdateFaculty = async () => {
-    const facultyRef = doc(db, 'FACULTY', facultyID); // Use facultyID from state
-    const docSnap = await getDoc(facultyRef); // Check if the document exists
+    const facultyRef = doc(db, 'FACULTY', facultyID);
+    const docSnap = await getDoc(facultyRef);
 
     if (docSnap.exists()) {
-      const updatedFaculty = { 
-        facultyName, 
-        email, 
-        phoneNumber, 
-        password, 
+      const updatedFaculty = {
+        facultyName,
+        email,
+        phoneNumber,
         dept,
-        institute_id: adminInstituteId // Include institute ID
+        institute_id: adminInstituteId
       };
       await updateDoc(facultyRef, updatedFaculty);
       setFaculties(faculties.map(fac => fac.id === facultyID ? { id: facultyID, ...updatedFaculty } : fac));
-      // Reset fields after successful update
       setFacultyID('');
       setFacultyName('');
       setEmail('');
       setPhoneNumber('');
       setPassword('');
       setDept('');
-      setIsEditing(false); // Reset edit mode
+      setIsEditing(false);
     } else {
-      console.error("No document found with ID:", facultyID); // Log an error if the document does not exist
+      console.error("No document found with ID:", facultyID);
     }
   };
 
@@ -170,7 +150,7 @@ const AddFaculty = () => {
     setPhoneNumber(fac.phoneNumber);
     setPassword(fac.password);
     setDept(fac.deptid);
-    setIsEditing(true); // Set edit mode
+    setIsEditing(true);
   };
 
   const filteredFaculties = faculties.filter(fac =>
@@ -231,7 +211,7 @@ const AddFaculty = () => {
         <table className="min-w-full bg-white rounded shadow-md">
           <thead>
             <tr>
-              <th className="p-2 border-b">Department ID</th>
+              <th className="p-2 border-b">Department</th>
               <th className="p-2 border-b">Faculty Name</th>
               <th className="p-2 border-b">Email</th>
               <th className="p-2 border-b">Phone Number</th>
